@@ -386,11 +386,16 @@ export default function useWebRTCAudioSession(
   async function startSession() {
     try {
       setStatus("Requesting microphone access...");
+      
+      // Detect mobile devices
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           noiseSuppression: true,
           echoCancellation: true,
-          autoGainControl: true
+          autoGainControl: isMobile ? false : true, // Disable autoGainControl on mobile
+          sampleRate: isMobile ? 16000 : 44100,     // Lower sample rate for mobile
         }
       });
       
@@ -466,11 +471,15 @@ export default function useWebRTCAudioSession(
       setStatus("Session established successfully!");
 
     } catch (err) {
-      console.error("Error accessing microphone:", err);
+      console.error("Microphone error:", err);
       if (err.name === 'NotAllowedError') {
         setStatus("Microphone access denied. Please grant permission.");
       } else if (err.name === 'NotFoundError') {
         setStatus("No microphone found. Please connect a microphone.");
+      } else if (err.name === 'SecurityError') {
+        setStatus("Security error: HTTPS required for microphone access.");
+      } else if (err.name === 'AbortError') {
+        setStatus("Hardware or system error with microphone.");
       } else {
         setStatus(`Error: ${err.message}`);
       }
