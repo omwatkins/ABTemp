@@ -387,20 +387,45 @@ export default function useWebRTCAudioSession(
     try {
       setStatus("Requesting microphone access...");
       
-      // Detect mobile devices
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      // Create audio context
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           noiseSuppression: true,
           echoCancellation: true,
-          autoGainControl: isMobile ? false : true, // Disable autoGainControl on mobile
-          sampleRate: isMobile ? 16000 : 44100,     // Lower sample rate for mobile
+          autoGainControl: false, // Disable auto gain for better control
         }
       });
       
       audioStreamRef.current = stream;
-      setupAudioVisualization(stream);
+
+      // Set up audio processing
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(2048, 1, 1);
+      
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      // Handle audio processing
+      processor.onaudioprocess = function(e) {
+        const inputData = e.inputBuffer.getChannelData(0);
+        const inputLevel = inputData.reduce((sum, val) => sum + Math.abs(val), 0) / inputData.length;
+
+        const threshold = 0.03; // Adjust this value for noise sensitivity
+        if (inputLevel > threshold) {
+          if (audioIndicatorRef.current) {
+            audioIndicatorRef.current.classList.add('active');
+          }
+          setCurrentVolume(inputLevel);
+        } else {
+          if (audioIndicatorRef.current) {
+            audioIndicatorRef.current.classList.remove('active');
+          }
+          setCurrentVolume(0);
+        }
+      };
 
       setStatus("Fetching ephemeral token...");
       const ephemeralToken = await getEphemeralToken();
@@ -417,17 +442,25 @@ export default function useWebRTCAudioSession(
       pc.ontrack = (event) => {
         audioEl.srcObject = event.streams[0];
 
-        // Optional: measure inbound volume
-        const audioCtx = new (window.AudioContext || window.AudioContext)();
-        const src = audioCtx.createMediaStreamSource(event.streams[0]);
-        const inboundAnalyzer = audioCtx.createAnalyser();
+        // Create analyzer for visualization
+        const inboundAnalyzer = audioContext.createAnalyser();
         inboundAnalyzer.fftSize = 256;
-        src.connect(inboundAnalyzer);
+        const inboundSource = audioContext.createMediaStreamSource(event.streams[0]);
+        inboundSource.connect(inboundAnalyzer);
         analyserRef.current = inboundAnalyzer;
 
-        // Start volume monitoring
+        // Monitor volume with threshold
         volumeIntervalRef.current = window.setInterval(() => {
-          setCurrentVolume(getVolume());
+          const dataArray = new Uint8Array(inboundAnalyzer.frequencyBinCount);
+          inboundAnalyzer.getByteFrequencyData(dataArray);
+          const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+          const normalizedVolume = average / 255;
+          
+          if (normalizedVolume > 0.03) { // Apply threshold to assistant audio
+            setCurrentVolume(normalizedVolume);
+          } else {
+            setCurrentVolume(0);
+          }
         }, 100);
       };
 
@@ -440,7 +473,7 @@ export default function useWebRTCAudioSession(
       };
       dataChannel.onmessage = handleDataChannelMessage;
 
-      // Add local (mic) track
+      // Add local (mic) track with processed audio
       pc.addTrack(stream.getTracks()[0]);
 
       // Create offer & set local description
@@ -471,15 +504,13 @@ export default function useWebRTCAudioSession(
       setStatus("Session established successfully!");
 
     } catch (err) {
-      console.error("Microphone error:", err);
+      console.error("Audio processing error:", err);
       if (err.name === 'NotAllowedError') {
         setStatus("Microphone access denied. Please grant permission.");
       } else if (err.name === 'NotFoundError') {
         setStatus("No microphone found. Please connect a microphone.");
       } else if (err.name === 'SecurityError') {
         setStatus("Security error: HTTPS required for microphone access.");
-      } else if (err.name === 'AbortError') {
-        setStatus("Hardware or system error with microphone.");
       } else {
         setStatus(`Error: ${err.message}`);
       }
