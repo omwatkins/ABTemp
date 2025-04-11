@@ -27,7 +27,7 @@ cd openai-realtime-api-nextjs
 ### 2. Environment Setup
 Create a `.env` file in the root directory:
 ```env
-OPENAI_API_KEY=your-openai-api-key
+OPENAI_API_KEY=my-open-ai-key
 ```
 
 ### 3. Install Dependencies
@@ -71,5 +71,7 @@ This project is licensed under the MIT License. See the `LICENSE` file for detai
 - [OpenAI](https://openai.com/) for their API and models.
 - [Next.js](https://nextjs.org/) for the framework.
 - [Tailwind CSS](https://tailwindcss.com/) for styling.
-- [Simon Willison’s Weblog](https://simonwillison.net/2024/Dec/17/openai-webrtc/) for inspiration
+- [Simon Willison's Weblog](https://simonwillison.net/2024/Dec/17/openai-webrtc/) for inspiration
 - [Originator: skrivov](https://github.com/skrivov/openai-voice-webrtc-next) for the WebRTC and Nextjs implementation
+
+mkdir -p app/components/openai-blocks
