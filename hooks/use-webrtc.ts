@@ -386,7 +386,14 @@ export default function useWebRTCAudioSession(
   async function startSession() {
     try {
       setStatus("Requesting microphone access...");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          noiseSuppression: true,
+          echoCancellation: true,
+          autoGainControl: true
+        }
+      });
+      
       audioStreamRef.current = stream;
       setupAudioVisualization(stream);
 
@@ -424,7 +431,6 @@ export default function useWebRTCAudioSession(
       dataChannelRef.current = dataChannel;
 
       dataChannel.onopen = () => {
-        // console.log("Data channel open");
         configureDataChannel(dataChannel);
       };
       dataChannel.onmessage = handleDataChannelMessage;
@@ -448,15 +454,26 @@ export default function useWebRTCAudioSession(
         },
       });
 
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+
       // Set remote description
       const answerSdp = await response.text();
       await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
       setIsSessionActive(true);
       setStatus("Session established successfully!");
+
     } catch (err) {
-      console.error("startSession error:", err);
-      setStatus(`Error: ${err}`);
+      console.error("Error accessing microphone:", err);
+      if (err.name === 'NotAllowedError') {
+        setStatus("Microphone access denied. Please grant permission.");
+      } else if (err.name === 'NotFoundError') {
+        setStatus("No microphone found. Please connect a microphone.");
+      } else {
+        setStatus(`Error: ${err.message}`);
+      }
       stopSession();
     }
   }
